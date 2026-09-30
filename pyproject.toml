@@ -1,18 +1,23 @@
-# Workspace root. It is not a package itself: it only ties the servers together so one
-# `uv sync` installs every server plus the shared dev tools, with a single uv.lock.
 [project]
-name = "mcp-server-lab"
-version = "0.0.0"
-description = "Learning Python MCP best practices, one server at a time"
+name = "x-basic-stdio"
+version = "0.1.0"
+description = "Basic read-only X (Twitter) MCP server over stdio"
+readme = "README.md"
+authors = [
+    { name = "Rohit Kr Singh", email = "ht97kumarrk@gmail.com" }
+]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.28",
+    "mcp>=2.2,<3",
+]
 
-[tool.uv]
-package = false
+[project.scripts]
+x-basic-stdio = "x_basic_stdio:main"
 
-[tool.uv.workspace]
-members = ["servers/*"]
-exclude = ["servers/.gitkeep"]
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
@@ -21,9 +26,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# Each server has its own tests/ folder; --import-mode=importlib lets them share file names.
-addopts = "--import-mode=importlib"
-testpaths = ["servers"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100

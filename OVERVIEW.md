@@ -1,7 +1,7 @@
 # x-basic-stdio: codebase overview
 
 A tour of how this server is put together and how one request flows through it. For what it
-exposes and how to run it, see `README.md`; for the rules when changing it, see `CLAUDE.md`.
+exposes and how to run it, see `README.md`; for the rules when changing it, see `.claude/CLAUDE.md`.
 
 ## The pieces
 

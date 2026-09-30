@@ -1,7 +1,7 @@
 # CLAUDE.md: x-basic-stdio
 
 Guidance for this server only. The repo-wide rules (branches, commits, MCP conventions) are in
-the root `CLAUDE.md`.
+`CLAUDE.md` at the repo root.
 
 ## What this server is for
 
@@ -59,7 +59,7 @@ following). If a change needs one of these, it goes in a new server branch.
 ## Commands
 
 ```bash
-uv run pytest servers/x-basic-stdio
-X_BEARER_TOKEN=... uv run --package x-basic-stdio x-basic-stdio
-X_BEARER_TOKEN=... npx @modelcontextprotocol/inspector uv run --package x-basic-stdio x-basic-stdio
+uv run pytest
+X_BEARER_TOKEN=... uv run x-basic-stdio
+X_BEARER_TOKEN=... npx @modelcontextprotocol/inspector uv run x-basic-stdio
 ```

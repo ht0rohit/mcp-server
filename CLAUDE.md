@@ -15,6 +15,9 @@ series that goes from a basic stdio server to advanced Streamable HTTP servers. 
 | `main` | Only the shared files: this file, `README.md`, `docs/`, CI, `pyproject.toml`, `uv.lock`, `.gitignore`, `.python-version`, `servers/.gitkeep`. **Never a server.** | Commit and push directly to `main`. No extra branch, no PR. |
 | `mcp/<nn>-<service>-<flavour>` | Exactly one server, in `servers/<service>-<flavour>/`, on top of `main`. | Cut from the latest `main`, push it, and leave it there. **Never merge it into `main` and never open a PR into `main`.** |
 
+- **No side branches.** A change to an existing branch (a fix, docs, review feedback) is
+  committed directly on that branch. Never create a new branch per change or per PR, and a PR
+  for a branch's changes only ever targets that same branch.
 - `<nn>` is the next free two-digit number (`01`, `02`, ...). Example: `mcp/01-x-basic-stdio`.
 - A new server can start from an existing server branch when it builds on it (for example an
   advanced X server cut from `mcp/01-x-basic-stdio`). It still gets its own branch and folder.

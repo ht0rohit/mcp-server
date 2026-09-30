@@ -79,7 +79,9 @@ async def test_real_server_over_http(running_server, mode):
 
 
 def test_refuses_to_start_without_auth_tokens():
-    env = {"PATH": os.environ.get("PATH", ""), "X_BEARER_TOKEN": "dummy"}
+    # Keep SYSTEMROOT: without it, Python on Windows can't start asyncio at all.
+    keep = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT") if k in os.environ}
+    env = {**keep, "X_BEARER_TOKEN": "dummy"}
     command = [sys.executable, "-m", "x_advanced_http"]
     proc = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
     assert proc.returncode == 1

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from x_advanced_http.client import UserCache
 from x_advanced_http.config import Config, ConfigError
 

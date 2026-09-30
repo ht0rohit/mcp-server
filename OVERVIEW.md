@@ -1,8 +1,8 @@
 # x-advanced-http: codebase overview
 
 A tour of how this server is put together and how requests flow through it. For what it exposes
-and how to run it, see `README.md`; for the rules when changing it, see `CLAUDE.md`. Server 01
-(`mcp/01-x-basic-stdio`) has the same kind of overview, so the two can be read side by side.
+and how to run it, see `README.md`; for the rules when changing it, see `.claude/CLAUDE.md`.
+Server 01 (`mcp/01-x-basic-stdio`) has the same kind of overview, so the two can be read side by side.
 
 ## The pieces
 

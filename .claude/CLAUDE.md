@@ -1,7 +1,7 @@
 # CLAUDE.md: x-advanced-http
 
 Guidance for this server only. The repo-wide rules (branches, commits, MCP conventions) are in
-the root `CLAUDE.md`.
+`CLAUDE.md` at the repo root.
 
 ## What this server is for
 
@@ -77,7 +77,7 @@ in `create_server()` too.
 
 ## X API facts the code relies on
 
-Everything in server 01's CLAUDE.md, plus:
+Everything in server 01's `.claude/CLAUDE.md`, plus:
 
 - Don't cap post length locally: X counts weighted characters (URLs 23, emoji and CJK 2) and
   Premium allows more. X's 400 message tells the model what was wrong.
@@ -90,7 +90,7 @@ Everything in server 01's CLAUDE.md, plus:
 ## Commands
 
 ```bash
-uv run pytest servers/x-advanced-http
-X_BEARER_TOKEN=... MCP_AUTH_TOKENS='<token>=x:read,x:write' uv run --package x-advanced-http x-advanced-http
+uv run pytest
+X_BEARER_TOKEN=... MCP_AUTH_TOKENS='<token>=x:read,x:write' uv run x-advanced-http
 uvicorn --factory x_advanced_http.server:create_app --port 8000   # same app, env config
 ```

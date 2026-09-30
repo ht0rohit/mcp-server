@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 
 import pytest
+from mcp import MCPError
+from mcp_types import INTERNAL_ERROR, INVALID_PARAMS
 
 pytestmark = pytest.mark.anyio
 
@@ -118,6 +120,7 @@ async def test_search_errors_are_explained(client):
 
     limited = await client.call_tool("x_search_recent_posts", {"query": "rate-limited"})
     assert limited.is_error and "rate limit" in text(limited)
+    assert "resets in 0 seconds" in text(limited)  # the reset time in the fake is in the past
 
     forbidden = await client.call_tool("x_search_recent_posts", {"query": "forbidden"})
     assert forbidden.is_error and "plan" in text(forbidden)
@@ -151,3 +154,22 @@ async def test_prompts(client):
     prompt = await client.get_prompt("topic_pulse", {"topic": "MCP"})
     message = prompt.messages[0].content.text
     assert "x_search_recent_posts" in message and "lang:en" in message
+
+
+async def test_long_posts_show_their_full_text(client):
+    result = await client.call_tool("x_get_post", {"post_id": "1700000000000000001"})
+    assert "full ending here" in text(result)
+    assert "cuts short in the text field…" not in text(result)
+
+
+async def test_only_a_missing_user_is_resource_not_found(client):
+    # ResourceNotFoundError reaches the client as -32602; any other ResourceError as -32603.
+    with pytest.raises(MCPError) as missing:
+        await client.read_resource("x://users/nobody_here")
+    assert missing.value.error.code == INVALID_PARAMS
+    assert "No X user named" in missing.value.error.message
+
+    with pytest.raises(MCPError) as limited:
+        await client.read_resource("x://users/ratelimited")
+    assert limited.value.error.code == INTERNAL_ERROR
+    assert "rate limit" in limited.value.error.message

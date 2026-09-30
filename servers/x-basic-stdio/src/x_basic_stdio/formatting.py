@@ -32,7 +32,9 @@ def format_user(user: dict[str, Any]) -> str:
 def format_post(post: dict[str, Any], authors: dict[str, str]) -> str:
     m = post.get("public_metrics", {})
     handle = authors.get(post.get("author_id", ""), post.get("author_id", "?"))
-    text = post.get("text", "").replace("\n", " ")
+    # Long posts carry their full text in `note_tweet`; `text` stops at 280 characters.
+    full_text = post.get("note_tweet", {}).get("text") or post.get("text", "")
+    text = full_text.replace("\n", " ")
     return (
         f"[{post['id']}] @{handle} at {post.get('created_at', '?')}\n"
         f"{text}\n"
@@ -76,8 +78,8 @@ def join_within_limit(blocks: list[str], separator: str) -> str:
     kept: list[str] = []
     size = 0
     for block in blocks:
-        if size + len(block) + len(separator) > CHARACTER_LIMIT:
-            break
+        if kept and size + len(block) + len(separator) > CHARACTER_LIMIT:
+            break  # always keep the first item, so an oversized one still comes back
         kept.append(block)
         size += len(block) + len(separator)
     text = separator.join(kept)

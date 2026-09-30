@@ -22,12 +22,13 @@ from dataclasses import dataclass
 from typing import Annotated, Literal
 
 from mcp.server.mcpserver import Context, MCPServer
-from mcp.server.mcpserver.exceptions import ResourceNotFoundError
+from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError
 from mcp_types import ToolAnnotations
 from pydantic import Field
 
-from .client import TOKEN_ENV, XApiError, XClient
+from .client import TOKEN_ENV, XApiError, XClient, XNotFoundError
 from .formatting import (
+    authors_by_id,
     format_missing,
     format_post,
     format_post_page,
@@ -140,8 +141,7 @@ async def x_get_users(
 async def x_get_post(post_id: PostId, ctx: Context) -> str:
     """Get one X post by ID: author, time, full text and engagement counts."""
     body = await x_client(ctx).post(post_id)
-    authors = {u["id"]: u["username"] for u in body.get("includes", {}).get("users", [])}
-    return format_post(body["data"], authors)
+    return format_post(body["data"], authors_by_id(body))
 
 
 @mcp.tool(title="Get several X posts", annotations=READ_ONLY, structured_output=False)
@@ -257,9 +257,12 @@ def search_operators() -> str:
 async def user_profile(username: str, ctx: Context) -> str:
     try:
         body = await x_client(ctx).user_by_username(clean_username(username))
-    except XApiError as exc:
-        # Resources report failures with ResourceError / ResourceNotFoundError, not ToolError.
+    except XNotFoundError as exc:
+        # Resources report failures with ResourceNotFoundError / ResourceError, not ToolError.
         raise ResourceNotFoundError(str(exc)) from exc
+    except XApiError as exc:
+        # Rate limits, auth and network failures are not "not found".
+        raise ResourceError(str(exc)) from exc
     return json.dumps(body["data"], indent=2)
 
 

@@ -25,7 +25,7 @@ following). If a change needs one of these, it goes in a new server branch.
 | File | Holds | Rule |
 |---|---|---|
 | `src/x_basic_stdio/server.py` | The MCP layer: server, lifespan, tools, resources, prompts, `main()` | Written to be read top to bottom; keep the numbered sections and comments |
-| `src/x_basic_stdio/client.py` | `XClient` (async httpx) and HTTP error to `XApiError` mapping | No MCP imports except `ToolError` |
+| `src/x_basic_stdio/client.py` | `XClient` (async httpx), HTTP error to `XApiError` mapping, `XNotFoundError` for missing items | No MCP imports except `ToolError` |
 | `src/x_basic_stdio/formatting.py` | X JSON to compact text, `CHARACTER_LIMIT`, pagination hint | Drop whole items, never cut text mid-item |
 | `tests/conftest.py` | Fake X API (`fake_x_api`) and the in-process `client` fixture | Mirror real X behaviour |
 | `tests/test_server.py` | Tools, resources, prompts through the protocol | |
@@ -48,11 +48,13 @@ following). If a change needs one of these, it goes in a new server branch.
 - Base URL `https://api.x.com/2`, app-only bearer token from `X_BEARER_TOKEN`.
 - A missing user or post is **HTTP 200** with an `errors` array and no `data`. Batch lookups
   return `data` for what exists plus `errors` for the rest.
+- Posts over 280 characters come back with `text` cut short and the full text in
+  `note_tweet.text` (requested through `tweet.fields`). Always prefer `note_tweet`.
 - `max_results` ranges differ: user timelines and mentions 5 to 100, recent search 10 to 100.
 - Pagination: timelines take `pagination_token`, recent search takes `next_token`; both return
   `meta.next_token`. Tools expose both as a single `cursor` argument.
 - 403 usually means the API plan doesn't include the endpoint (the free tier blocks most reads);
-  429 carries `x-rate-limit-reset`.
+  429 carries `x-rate-limit-reset` (Unix time); errors turn it into seconds to wait.
 
 ## Commands
 

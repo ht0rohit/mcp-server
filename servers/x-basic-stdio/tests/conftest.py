@@ -34,6 +34,15 @@ POSTS = {
             "quote_count": 0,
         },
     },
+    # A long post: X cuts `text` at 280 characters and puts the full text in `note_tweet`.
+    "1700000000000000001": {
+        "id": "1700000000000000001",
+        "text": "A long post that X cuts short in the text field…",
+        "note_tweet": {"text": "A long post that X cuts short, full ending here."},
+        "author_id": "2244994945",
+        "created_at": "2023-09-01T10:00:00.000Z",
+        "public_metrics": {"like_count": 1},
+    },
 }
 AUTHORS = {"users": [{"id": "2244994945", "username": "XDevelopers"}]}
 
@@ -55,6 +64,8 @@ def fake_x_api(request: httpx.Request) -> httpx.Response:
 
     if path.startswith("/users/by/username/"):
         name = path.rsplit("/", 1)[1]
+        if name == "ratelimited":
+            return httpx.Response(429, headers={"x-rate-limit-reset": "9999999999"}, json={})
         user = USERS.get(name.lower())
         return httpx.Response(200, json={"data": user} if user else not_found(name))
     if path == "/users/by":

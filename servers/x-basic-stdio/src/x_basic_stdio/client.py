@@ -7,6 +7,7 @@ lets tests swap the network for an `httpx.MockTransport`.
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import httpx
@@ -17,7 +18,8 @@ TOKEN_ENV = "X_BEARER_TOKEN"
 
 # Fields requested on every call, so every tool can show the same details.
 USER_FIELDS = "created_at,description,location,public_metrics,verified,url"
-POST_FIELDS = "created_at,author_id,public_metrics,conversation_id,lang"
+# `note_tweet` holds the full text of posts over 280 characters; `text` is cut short for them.
+POST_FIELDS = "created_at,author_id,public_metrics,conversation_id,lang,note_tweet"
 
 
 class XApiError(ToolError):
@@ -26,6 +28,10 @@ class XApiError(ToolError):
     Subclassing `ToolError` means the SDK turns it into a tool result with `is_error: true`
     and this message, instead of a generic crash.
     """
+
+
+class XNotFoundError(XApiError):
+    """The user or post does not exist. Resources map this, and only this, to "not found"."""
 
 
 class XClient:
@@ -110,7 +116,7 @@ def _post_params() -> dict[str, str]:
 def _require_data(body: dict[str, Any], not_found: str) -> dict[str, Any]:
     # X answers HTTP 200 with an `errors` array (and no `data`) when an item does not exist.
     if "data" not in body:
-        raise XApiError(not_found)
+        raise XNotFoundError(not_found)
     return body
 
 
@@ -133,7 +139,10 @@ def _describe_http_error(response: httpx.Response) -> str:
     if status == 404:
         return "X could not find that resource."
     if status == 429:
-        reset = response.headers.get("x-rate-limit-reset")
-        when = f" The limit resets at Unix time {reset}." if reset else ""
+        when = ""
+        reset = response.headers.get("x-rate-limit-reset", "")
+        if reset.isdigit():
+            # Models convert Unix times poorly, so say how long to wait instead.
+            when = f" It resets in {max(0, int(reset) - int(time.time()))} seconds."
         return f"X rate limit reached.{when} Wait before retrying."
     return f"X API error {status}. {detail}".strip()

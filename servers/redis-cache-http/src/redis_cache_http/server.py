@@ -2,52 +2,58 @@
 
 What is different from a stdio server, all in this file:
 
-1. A lifespan that opens one Redis pool for the whole process.   -> `lifespan()`
-2. The server object.                                           -> `mcp = MCPServer(...)`
-3. Tools with typed input and output.                           -> `@mcp.tool(...)`
-4. Resources: data a client can read by URI.                    -> `@mcp.resource(...)`
-5. A plain HTTP health route next to the MCP endpoint.          -> `@mcp.custom_route(...)`
-6. Serving over HTTP at a URL, stateless.                       -> `main()`
+1. One Redis pool for the whole process, opened in the lifespan.  -> `create_server()`
+2. Tools with typed input and output.                             -> `cache_get()`, ...
+3. Resources: data a client can read by URI.                      -> `cached_value()`, ...
+4. A plain HTTP health route next to the MCP endpoint.            -> `create_server()`
+5. The server, built by a factory from settings (auth included).  -> `create_server()`
+6. The ASGI app with DNS-rebinding protection, and running it.    -> `create_app()`, `main()`
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated
 
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError, ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import ToolAnnotations
-from pydantic import Field
+from pydantic import AnyHttpUrl, Field, ValidationError
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
+from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from .auth import StaticTokenVerifier
 from .cache import RedisCache
 from .config import Settings, get_settings
 from .models import CacheEntry, CacheStats, DeleteResult, KeyPage, SetResult
 
 logger = logging.getLogger(__name__)
 
+NAME = "redis-cache-http"
+VERSION = "0.1.0"
+INSTRUCTIONS = (
+    "A shared key-value cache backed by Redis. Store text or JSON under a key with an "
+    "expiry (TTL), read it back, and delete it. Keys are grouped by namespace."
+)
 
-# --- 1. Shared state, opened once for the life of the server ------------------------------
+
+# --- 1. Shared state ----------------------------------------------------------------------
 
 
 @dataclass
 class AppContext:
     cache: RedisCache
     settings: Settings
-
-
-# Two handlers get no `ctx`: the health route (plain HTTP, outside MCP) and static resources
-# (the SDK only injects Context into templated ones). The lifespan publishes the running cache
-# here for them; everything else reads it from `ctx`.
-_running: dict[str, RedisCache] = {}
 
 
 def make_redis(settings: Settings) -> Redis:
@@ -62,47 +68,7 @@ def make_redis(settings: Settings) -> Redis:
     )
 
 
-@asynccontextmanager
-async def lifespan(_server: MCPServer) -> AsyncIterator[AppContext]:
-    # Over HTTP the SDK enters this once when the app starts, not once per request, so every
-    # request shares this one pool.
-    settings = get_settings()
-    redis = make_redis(settings)
-    try:
-        # Fail fast: refuse to start if Redis is unreachable, instead of failing every call.
-        await redis.ping()
-    except RedisError as exc:
-        await redis.aclose()
-        raise RuntimeError(f"Cannot reach Redis at {settings.redis_url}: {exc}") from exc
-    logger.info("Connected to Redis; keys are prefixed with %r", settings.cache_key_prefix)
-    cache = RedisCache(redis, settings.cache_key_prefix)
-    _running["cache"] = cache
-    try:
-        yield AppContext(cache=cache, settings=settings)
-    finally:
-        _running.clear()
-        await redis.aclose()
-
-
-def app_context(ctx: Context) -> AppContext:
-    return ctx.request_context.lifespan_context
-
-
-# --- 2. The server ------------------------------------------------------------------------
-
-mcp = MCPServer(
-    name="redis-cache-http",
-    title="Redis cache",
-    version="0.1.0",
-    instructions=(
-        "A shared key-value cache backed by Redis. Store text or JSON under a key with an "
-        "expiry (TTL), read it back, and delete it. Keys are grouped by namespace."
-    ),
-    lifespan=lifespan,
-)
-
-
-# --- 3. Tools -----------------------------------------------------------------------------
+# --- 2. Tools -----------------------------------------------------------------------------
 #
 # Best practices shown below:
 # - Prefixed, verb-first names (`cache_get`) so they never clash with other servers' tools.
@@ -149,7 +115,6 @@ def settings(ctx: Context) -> Settings:
     return ctx.request_context.lifespan_context.settings
 
 
-@mcp.tool(title="Get cached value", annotations=READ_ONLY)
 async def cache_get(namespace: Namespace, key: Key, ctx: Context) -> CacheEntry:
     """Read a cached value. Returns found=false on a miss (never stored, or expired).
 
@@ -162,7 +127,6 @@ async def cache_get(namespace: Namespace, key: Key, ctx: Context) -> CacheEntry:
     )
 
 
-@mcp.tool(title="Store value in cache", annotations=OVERWRITE)
 async def cache_set(
     namespace: Namespace,
     key: Key,
@@ -185,14 +149,12 @@ async def cache_set(
     return SetResult(namespace=namespace, key=key, ttl_seconds=ttl, replaced=replaced)
 
 
-@mcp.tool(title="Delete cached value", annotations=DELETE)
 async def cache_delete(namespace: Namespace, key: Key, ctx: Context) -> DeleteResult:
     """Delete one cached value, e.g. when the data it came from has changed."""
     deleted = await cache(ctx).delete(namespace, key)
     return DeleteResult(namespace=namespace, key=key, deleted=deleted)
 
 
-@mcp.tool(title="List cached keys", annotations=READ_ONLY)
 async def cache_list_keys(
     namespace: Namespace,
     ctx: Context,
@@ -215,7 +177,15 @@ async def cache_list_keys(
     )
 
 
-# --- 4. Resources -------------------------------------------------------------------------
+TOOLS = [
+    (cache_get, "Get cached value", READ_ONLY),
+    (cache_set, "Store value in cache", OVERWRITE),
+    (cache_delete, "Delete cached value", DELETE),
+    (cache_list_keys, "List cached keys", READ_ONLY),
+]
+
+
+# --- 3. Resources -------------------------------------------------------------------------
 #
 # Tools are actions the model chooses to call; resources are data the user or app attaches as
 # context, like opening a file. Resources only read. Failures use resource errors:
@@ -225,25 +195,6 @@ NAMESPACE_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 KEY_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,200}$")
 
 
-@mcp.resource(
-    "cache://stats",
-    title="Cache stats",
-    description="Redis version, memory, hit rate, and how many keys this server owns",
-    mime_type="application/json",
-)
-async def cache_stats() -> str:
-    running = _running.get("cache")
-    if running is None:
-        raise ResourceError("The server is not connected to Redis.")
-    return CacheStats.model_validate(await running.stats()).model_dump_json(indent=2)
-
-
-@mcp.resource(
-    "cache://{namespace}/{key}",
-    title="Cached value",
-    description="The value stored under namespace/key, as stored (often JSON)",
-    mime_type="text/plain",
-)
 async def cached_value(namespace: str, key: str, ctx: Context) -> str:
     # URI parts skip the tool argument schemas, so validate them here the same way.
     if not NAMESPACE_RE.match(namespace) or not KEY_RE.match(key):
@@ -254,32 +205,141 @@ async def cached_value(namespace: str, key: str, ctx: Context) -> str:
     return value
 
 
-# --- 5. Health check ----------------------------------------------------------------------
+# --- 4 and 5. The server (with auth) and its health route -------------------------------
 #
-# Plain HTTP for Docker, Kubernetes or a load balancer: 200 when Redis answers, 503 when not.
-# It stays open when auth is added (orchestrators do not send tokens), so it reveals nothing
-# beyond ok / not ok.
+# A factory instead of a module-level `mcp`: auth is part of the server's constructor and
+# depends on settings, and tests can build a server with their own settings and fake Redis.
 
 
-@mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
-async def healthz(_request: Request) -> JSONResponse:
-    running = _running.get("cache")
-    if running is not None and await running.ping():
-        return JSONResponse({"status": "ok"})
-    return JSONResponse({"status": "unavailable"}, status_code=503)
+def create_server(settings: Settings) -> MCPServer:
+    # Two handlers get no `ctx`: the health route (plain HTTP, outside MCP) and static
+    # resources (the SDK only injects Context into templated ones). The lifespan publishes the
+    # running cache here for them; everything else reads it from `ctx`.
+    running: dict[str, RedisCache] = {}
+
+    @asynccontextmanager
+    async def lifespan(_server: MCPServer) -> AsyncIterator[AppContext]:
+        # Over HTTP the SDK enters this once when the app starts, not once per request, so
+        # every request shares this one pool.
+        redis = make_redis(settings)
+        try:
+            # Fail fast: refuse to start if Redis is unreachable, instead of failing every call.
+            await redis.ping()
+        except RedisError as exc:
+            await redis.aclose()
+            raise RuntimeError(f"Cannot reach Redis: {exc}") from exc
+        logger.info("Connected to Redis; keys are prefixed with %r", settings.cache_key_prefix)
+        running["cache"] = RedisCache(redis, settings.cache_key_prefix)
+        try:
+            yield AppContext(cache=running["cache"], settings=settings)
+        finally:
+            running.clear()
+            await redis.aclose()
+
+    auth: dict[str, object] = {}
+    if settings.mcp_auth_token is not None:
+        # The resource is the MCP endpoint's own URL, so its metadata is served at
+        # /.well-known/oauth-protected-resource/mcp, where MCP clients look first.
+        resource = f"{settings.public_url}/mcp"
+        auth = {
+            "token_verifier": StaticTokenVerifier(
+                settings.mcp_auth_token.get_secret_value(), resource=resource
+            ),
+            # The protected-resource metadata must name an authorization server, so it names
+            # this server. Nothing here issues tokens: clients send a static
+            # `Authorization: Bearer ...` header. Real OAuth replaces this in server 04.
+            "auth": AuthSettings(
+                issuer_url=AnyHttpUrl(settings.public_url),
+                resource_server_url=AnyHttpUrl(resource),
+                validate_token_resource=True,
+            ),
+        }
+
+    mcp = MCPServer(
+        name=NAME,
+        title="Redis cache",
+        version=VERSION,
+        instructions=INSTRUCTIONS,
+        lifespan=lifespan,
+        **auth,
+    )
+
+    for fn, title, hints in TOOLS:
+        mcp.add_tool(fn, title=title, annotations=hints)
+
+    @mcp.resource(
+        "cache://stats",
+        title="Cache stats",
+        description="Redis version, memory, hit rate, and how many keys this server owns",
+        mime_type="application/json",
+    )
+    async def cache_stats() -> str:
+        if "cache" not in running:
+            raise ResourceError("The server is not connected to Redis.")
+        return CacheStats.model_validate(await running["cache"].stats()).model_dump_json(indent=2)
+
+    mcp.resource(
+        "cache://{namespace}/{key}",
+        title="Cached value",
+        description="The value stored under namespace/key, as stored (often JSON)",
+        mime_type="text/plain",
+    )(cached_value)
+
+    # Health check: plain HTTP for Docker, Kubernetes or a load balancer. 200 when Redis
+    # answers, 503 when not. Custom routes skip auth (orchestrators send no token), so it
+    # reveals nothing beyond ok / not ok.
+    @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
+    async def healthz(_request: Request) -> JSONResponse:
+        if "cache" in running and await running["cache"].ping():
+            return JSONResponse({"status": "ok"})
+        return JSONResponse({"status": "unavailable"}, status_code=503)
+
+    return mcp
 
 
-# --- 6. Running over Streamable HTTP ------------------------------------------------------
+# --- 6. The ASGI app and running it -------------------------------------------------------
+
+
+def create_app(settings: Settings | None = None) -> Starlette:
+    """MCP at /mcp, /healthz, and (with a token) /.well-known/oauth-protected-resource.
+
+    `uvicorn --factory redis_cache_http.server:create_app` serves it too, which is how you
+    would run several worker processes.
+    """
+    settings = settings or get_settings()
+    security = TransportSecuritySettings(
+        # DNS-rebinding protection: a web page in your browser can make it send requests to
+        # localhost under the page's own host name. Accept only Host and Origin values we know.
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=settings.allowed_hosts,
+        allowed_origins=settings.allowed_origins,
+    )
+    return create_server(settings).streamable_http_app(
+        # No per-client session state: any request can go to any copy of the server.
+        stateless_http=True,
+        transport_security=security,
+    )
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    settings = get_settings()
-    logger.info("Serving MCP at http://%s:%d/mcp", settings.mcp_host, settings.mcp_port)
-    mcp.run(
-        transport="streamable-http",
-        host=settings.mcp_host,
-        port=settings.mcp_port,
-        # No per-client session state: any request can go to any copy of the server.
-        stateless_http=True,
+    try:
+        settings = get_settings()
+    except ValidationError as exc:
+        # One line per problem, without pydantic's URLs, and never the input values.
+        problems = "; ".join(
+            f"{'.'.join(map(str, e['loc'])) or 'settings'}: {e['msg']}"
+            for e in exc.errors(include_url=False, include_input=False)
+        )
+        print(f"{NAME}: invalid configuration: {problems}", file=sys.stderr)
+        sys.exit(1)
+
+    import uvicorn
+
+    logger.info(
+        "Serving MCP at http://%s:%d/mcp (auth %s)",
+        settings.mcp_host,
+        settings.mcp_port,
+        "on" if settings.mcp_auth_token else "off, loopback only",
     )
+    uvicorn.run(create_app(settings), host=settings.mcp_host, port=settings.mcp_port)

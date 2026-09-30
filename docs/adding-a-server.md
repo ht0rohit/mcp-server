@@ -33,7 +33,28 @@ only, a `.env.example` and a `tests/` folder.
 uv sync --all-packages && uv run ruff check . && uv run ruff format --check . && uv run pytest
 ```
 
-## 4. Push the branch
+## 4. Review before calling it done
+
+Passing tests only prove the code matches its own assumptions. Before pushing, check the things
+the review of servers 01 and 02 found that tests had missed:
+
+- **Fakes vs the real API.** Compare the fake upstream in `tests/conftest.py` with the API docs,
+  field by field, for every endpoint used. The fake only returns what its author expected (the
+  X fake never returned `note_tweet`, so long posts were silently cut at 280 characters).
+- **Parity with the server it builds on.** List the tools, resources and prompts of both and
+  explain every difference in the new server's README or CLAUDE.md.
+- **Every entry point.** Run each CLI flag and env var once and check the values derived from
+  it (a `--port` flag left the public URL on the old port).
+- **What the server advertises.** Read `/.well-known/*`, `initialize`, and `tools/list` output
+  as a client would, and ask whether a real client could act on each field.
+- **Retries against side effects.** For every retried call, ask what happens if the first
+  attempt succeeded but its response was lost.
+- **Error paths per surface.** Tools raise `ToolError`; resources raise
+  `ResourceNotFoundError` only for "missing" and `ResourceError` for everything else.
+- **Limits the upstream counts differently** (weighted characters, bytes vs code points).
+- **CI actually ran** on the pushed branch (open the Actions tab), not just locally.
+
+## 5. Push the branch
 
 ```bash
 git push -u origin mcp/<nn>-<service>-<flavour>
@@ -41,13 +62,14 @@ git push -u origin mcp/<nn>-<service>-<flavour>
 
 No PR into `main`: the branch is the deliverable.
 
-## 5. Update the index on `main`
+## 6. Update the index on `main`
 
 ```bash
 git switch main && git clean -fdX servers/
 # README.md: add a row to the server index
 # docs/roadmap.md: set the server's status and branch
 # docs/learnings.md: add what the server teaches
+# docs/decisions.md: add any decision you made on the user's behalf
 git commit -am "Index mcp/<nn>-<service>-<flavour>" && git push
 ```
 

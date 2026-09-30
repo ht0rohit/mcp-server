@@ -10,7 +10,7 @@ and [uv](https://docs.astral.sh/uv/).
 
 | # | Server | Transport | What it shows |
 |---|---|---|---|
-| | _None yet. The first, `x-basic-stdio`, is in progress._ | | |
+| 01 | [x-basic-stdio](servers/x-basic-stdio) | stdio | Read-only X (Twitter) server: tools, resources, resource templates, prompts, lifespan |
 
 The full plan is in [docs/roadmap.md](docs/roadmap.md).
 

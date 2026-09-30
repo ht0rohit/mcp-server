@@ -1,0 +1,33 @@
+# Workspace root. It is not a package itself: it only ties the servers together so one
+# `uv sync` installs every server plus the shared dev tools, with a single uv.lock.
+[project]
+name = "mcp-server-lab"
+version = "0.0.0"
+description = "Learning Python MCP best practices, one server at a time"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["servers/*"]
+exclude = ["servers/.gitkeep"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+# Each server has its own tests/ folder; --import-mode=importlib lets them share file names.
+addopts = "--import-mode=importlib"
+testpaths = ["servers"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC"]

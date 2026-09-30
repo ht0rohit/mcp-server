@@ -1,40 +1,54 @@
 # Adding a server
 
-1. Branch from the latest `main`:
+Each server lives on its own branch and is never merged into `main`. See the branch rule in
+[CLAUDE.md](../CLAUDE.md).
 
-   ```bash
-   git switch main && git pull
-   git switch -c mcp/<nn>-<service>-<flavour>
-   ```
+## 1. Cut the branch
 
-2. Create the package (it becomes a uv workspace member automatically):
+```bash
+git switch main && git pull && git clean -fdX servers/
+git switch -c mcp/<nn>-<service>-<flavour>          # <nn> = next free number
+```
 
-   ```bash
-   uv init --package --name <service>-<flavour> servers/<service>-<flavour>
-   uv add --package <service>-<flavour> "mcp>=2.2,<3"
-   ```
+To build on an earlier server, cut from its branch instead of `main`.
 
-   Then shape it like the existing servers: `src/<package>/server.py` with a `main()` that the
-   `[project.scripts]` entry points to, a `README.md`, a `.env.example` and a `tests/` folder.
+## 2. Create the package
 
-3. Write tests that need no network or secrets:
-   - in-process: `async with Client(server) as client: ...`
-   - HTTP to the upstream API: `httpx.MockTransport`
-   - one smoke test that spawns the real process (stdio) or starts the app (HTTP)
+```bash
+uv init --package --name <service>-<flavour> servers/<service>-<flavour>
+uv add --package <service>-<flavour> "mcp>=2.2,<3"
+```
 
-4. Check locally, then push the branch. Server branches are not merged into `main`:
+Shape it like the earlier servers: `src/<package>/server.py` with a `main()` that the
+`[project.scripts]` entry points to, a `README.md`, a `.env.example` and a `tests/` folder.
 
-   ```bash
-   uv sync --all-packages && uv run ruff check . && uv run ruff format --check . && uv run pytest
-   ```
+## 3. Test without network or secrets
 
-   ```bash
-   git push -u origin mcp/<nn>-<service>-<flavour>
-   ```
+- In-process through the protocol: `async with Client(server) as client: ...`
+- Upstream HTTP: `httpx.MockTransport`
+- One smoke test that spawns the real process (stdio) or starts the app (HTTP)
 
-5. Update the shared files on `main` with a small PR from a separate branch (for example
-   `docs/index-<nn>`): add the server to the README index, tick it in `docs/roadmap.md`, and add
-   any new lessons to `docs/learnings.md`.
+```bash
+uv sync --all-packages && uv run ruff check . && uv run ruff format --check . && uv run pytest
+```
+
+## 4. Push the branch
+
+```bash
+git push -u origin mcp/<nn>-<service>-<flavour>
+```
+
+No PR into `main`: the branch is the deliverable.
+
+## 5. Update the index on `main`
+
+```bash
+git switch main && git clean -fdX servers/
+# README.md: add a row to the server index
+# docs/roadmap.md: set the server's status and branch
+# docs/learnings.md: add what the server teaches
+git commit -am "Index mcp/<nn>-<service>-<flavour>" && git push
+```
 
 ## stdio or Streamable HTTP?
 
@@ -48,7 +62,6 @@
 
 ## What can be verified where
 
-Anything about your code and the protocol (unit tests, the stdio smoke test, the Inspector against
-a local process) works in a cloud session or on your machine. Real clients (Claude Desktop, Claude
-Code), your local files and live upstream API calls with your token need your machine. Each
-server README says which of these were checked.
+Unit tests, the protocol smoke test and the Inspector against a local process work in a cloud
+session or on your machine. Real clients (Claude Desktop, Claude Code), local files and live API
+calls with your token need your machine. Say which ones you checked in the server README.

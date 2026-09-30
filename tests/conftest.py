@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 from mcp import Client
+
 from x_basic_stdio import server
 from x_basic_stdio.client import XClient
 

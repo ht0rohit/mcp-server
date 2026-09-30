@@ -20,8 +20,12 @@ series that goes from a basic stdio server to advanced Streamable HTTP servers. 
   advanced X server cut from `mcp/01-x-basic-stdio`). It still gets its own branch and folder.
 - After pushing a server branch, update `main` in one small direct commit: add the branch to the
   README index, set its row in `docs/roadmap.md`, and add new lessons to `docs/learnings.md`.
-- If `main` changes after a server branch was cut, merge `main` into that branch when it needs
-  the change. Never the other way round.
+- Each server has its own `servers/<service>-<flavour>/CLAUDE.md` on its branch, for guidance
+  that only applies to that server (its files, upstream API quirks, how to extend it, what it
+  deliberately leaves out). This root file stays the same on every branch.
+- To bring updated shared docs from `main` onto a server branch, copy them rather than merging:
+  `git checkout origin/main -- CLAUDE.md docs/` then commit. (Merging `main` into
+  `mcp/01-x-basic-stdio` would apply an old revert and delete the server.)
 
 ## Commits
 
@@ -45,6 +49,7 @@ main
 
 a server branch adds
 └── servers/<service>-<flavour>/
+    ├── CLAUDE.md             # guidance for this server only
     ├── pyproject.toml        # its deps and console script (a uv workspace member)
     ├── README.md             # what it exposes, how to run it, how to connect a client
     ├── .env.example          # every env var it reads, no real values

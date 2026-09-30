@@ -20,7 +20,8 @@ uv add --package <service>-<flavour> "mcp>=2.2,<3"
 ```
 
 Shape it like the earlier servers: `src/<package>/server.py` with a `main()` that the
-`[project.scripts]` entry points to, a `README.md`, a `.env.example` and a `tests/` folder.
+`[project.scripts]` entry points to, a `README.md`, a `CLAUDE.md` with guidance for this server
+only, a `.env.example` and a `tests/` folder.
 
 ## 3. Test without network or secrets
 

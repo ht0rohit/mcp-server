@@ -74,6 +74,29 @@ server teaches something new.
 - **The lifespan runs once per process** over HTTP, so pools and caches there are shared by every
   request.
 
+## Shared backend over HTTP (branch `mcp/03-redis-cache-http`)
+
+- **Go stateless when nothing is per client** (`stateless_http=True`): any worker or replica can
+  answer any request, so the server scales out behind a load balancer.
+- **Fail fast at startup.** Ping the backend in the lifespan and refuse to start, rather than
+  fail every call later. `/healthz` reports the same check at runtime (`503` when it fails).
+- **A shared store needs guardrails:** prefix and namespace every key, give every write a TTL,
+  and never walk the keyspace (`SCAN` with bounded rounds, never `KEYS`).
+- **A miss is data, not an error.** Return `found: false` from a tool; only a resource URI that
+  names nothing is `ResourceNotFoundError`.
+- **One exception for "backend down" on both surfaces.** A `ResourceError` escaping a tool is
+  anticipated like `ToolError`, so subclass `ResourceError` and raise it from the data layer.
+- **Static resources and custom routes get no `Context`.** Have the lifespan publish what they
+  need in a holder created by the server factory.
+- **Secure by default:** no token needed on loopback, but refuse to start on any other host
+  without a token and a public URL.
+- **Pass `TransportSecuritySettings` yourself** when you build the app: the SDK only turns on
+  Host/Origin checks automatically for a loopback `host` it knows about.
+- **Name the MCP endpoint as the protected resource** (`.../mcp`), so the metadata lives at
+  `/.well-known/oauth-protected-resource/mcp`, where clients look first.
+- **pydantic errors echo the input.** Format config errors without input values, or a bad
+  secret gets printed.
+
 ## stdio
 
 - **stdout is the protocol.** Log to stderr, and test that nothing else reaches stdout.
@@ -90,6 +113,8 @@ server teaches something new.
 - **Test HTTP in-process** with `httpx2.ASGITransport` against the real app (routes, 401s, Host
   checks), run the app's lifespan with `app.router.lifespan_context(app)`, and add one test that
   starts the real process on a port.
+- **Fake the backend, and prove the fake.** fakeredis keeps tests offline, but it has no `INFO`;
+  run the same suite against the real backend with a switch (`REDIS_TEST_URL`) before trusting it.
 - **Test both protocol eras.** `Client(server, mode="legacy")` exercises 2025-11-25 sessions;
   the default negotiates 2026-07-28.
 

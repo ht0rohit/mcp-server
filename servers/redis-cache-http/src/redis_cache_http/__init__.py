@@ -1,6 +1,5 @@
 """A Redis cache MCP server, over Streamable HTTP."""
 
+from .server import main, mcp
 
-def main() -> None:
-    # Placeholder until Step 2 adds server.py; kept so the console script resolves.
-    raise SystemExit("redis-cache-http: server not implemented yet")
+__all__ = ["main", "mcp"]

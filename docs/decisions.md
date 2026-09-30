@@ -3,6 +3,16 @@
 Decisions made on the owner's behalf, newest first, one line each with the reason. Revisit any
 of them by changing the code and striking the line through.
 
+## 2026-09-30: server 03 (redis-cache-http)
+
+- **Redis cache over Streamable HTTP as the first HTTP-first server.** Chosen with the owner; a cache keeps the service small and makes the HTTP lessons unavoidable.
+- **Package and script keep uv's default names** (`redis_cache_http`, `redis-cache-http`), like server 01.
+- **A cache miss is `found: false`, not a `ToolError`.** Misses are normal answers; errors are for real failures.
+- **Redis failures raise `CacheUnavailableError(ResourceError)`**: the SDK treats `ResourceError` as anticipated in tools and resources, so one type serves both.
+- **Static token auth is optional on loopback and required elsewhere**; the server refuses to start exposed without it or without `MCP_PUBLIC_URL`.
+- **`create_server(settings)` factory instead of a module-level `mcp`**: auth is a constructor argument, and tests build their own servers.
+- **Tests use fakeredis with a patched `INFO`**; `REDIS_TEST_URL` runs the same suite on a real Redis.
+
 ## 2026-09-30: work branches
 
 - **Server branches change only through PRs from `work/...` branches**, merged with a merge commit, and the work branch is deleted after the merge. Asked by the owner after PR #3 put the Redis server on `main` (reverted in `b3b17b1`).

@@ -18,6 +18,7 @@ are never merged back. To see or run a server, check out its branch.
 |---|---|---|---|
 | 01 | [`mcp/01-x-basic-stdio`](../../tree/mcp/01-x-basic-stdio) | stdio | Read-only X (Twitter) server: tools, resources, resource templates, prompts, lifespan |
 | 02 | [`mcp/02-x-advanced`](../../tree/mcp/02-x-advanced) | Streamable HTTP | X server end to end: bearer-token auth with scopes, structured output, progress, confirmed writes (elicitation), subscriptions, completions, middleware |
+| 03 | [`mcp/03-redis-cache-http`](../../tree/mcp/03-redis-cache-http) | Streamable HTTP | Redis cache: one pool in the lifespan, stateless HTTP, `/healthz`, optional bearer token with secure defaults, DNS-rebinding protection, fakeredis tests |
 
 The full plan is in [docs/roadmap.md](docs/roadmap.md).
 

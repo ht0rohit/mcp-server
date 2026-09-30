@@ -80,6 +80,10 @@ git switch mcp/<nn>-<service>-<flavour> && git pull && git branch -D work/<nn>-<
 One work branch per piece of work, not per commit. If a PR into `main` ever appears, close it
 without merging.
 
+Cloud Claude sessions cannot delete remote branches (the git proxy answers `403`), so the owner
+deletes the work branch with the PR page's "Delete branch" button, or turns on
+Settings → General → "Automatically delete head branches".
+
 ## 6. Update the index on `main`
 
 ```bash

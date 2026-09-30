@@ -13,11 +13,18 @@ series that goes from a basic stdio server to advanced Streamable HTTP servers. 
 | Branch | Holds | How it changes |
 |---|---|---|
 | `main` | Only the shared files: this file, `README.md`, `docs/`, CI, `pyproject.toml`, `uv.lock`, `.gitignore`, `.python-version`, `servers/.gitkeep`. **Never a server.** | Commit and push directly to `main`. No extra branch, no PR. |
-| `mcp/<nn>-<service>-<flavour>` | Exactly one server, in `servers/<service>-<flavour>/`, on top of `main`. | Cut from the latest `main`, push it, and leave it there. **Never merge it into `main` and never open a PR into `main`.** |
+| `mcp/<nn>-<service>-<flavour>` | Exactly one server, in `servers/<service>-<flavour>/`, on top of `main`. | Created once from the latest `main`. After that it changes only through PRs from its work branches. **Never merge it into `main` and never open a PR into `main`.** |
+| `work/<nn>-<service>-<flavour>-<topic>` | One piece of work on a server (a step, a fix, review feedback). | Cut from its server branch, push every commit to it, open a PR **into that server branch**, and delete it (remote and local) once the PR is merged. |
 
-- **No side branches.** A change to an existing branch (a fix, docs, review feedback) is
-  committed directly on that branch. Never create a new branch per change or per PR, and a PR
-  for a branch's changes only ever targets that same branch.
+- **Work branches.** Change a server through one `work/...` branch per piece of work, not one
+  per commit. Its PR's base is always the server branch it was cut from: check the base before
+  creating the PR, because GitHub and the Claude app default to `main`. The owner merges
+  ("Create a merge commit", so each commit stays visible), then the work branch is deleted and
+  the next piece of work starts from the updated server branch.
+- **A PR into `main` from a server or work branch must never exist, even open.** If one
+  appears (for example from a "Create PR" button), close it without merging and say so.
+- The prefix is `work/`, not `mcp/<server>/...`: git cannot hold `mcp/03-x` and `mcp/03-x/y`
+  as branches at the same time.
 - `<nn>` is the next free two-digit number (`01`, `02`, ...). Example: `mcp/01-x-basic-stdio`.
 - A new server can start from an existing server branch when it builds on it (for example an
   advanced X server cut from `mcp/01-x-basic-stdio`). It still gets its own branch and folder.

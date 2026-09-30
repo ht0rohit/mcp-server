@@ -62,6 +62,24 @@ git push -u origin mcp/<nn>-<service>-<flavour>
 
 No PR into `main`: the branch is the deliverable.
 
+## Changing a server after that: work branches
+
+Every later change to a server branch (a new step, a fix, review feedback) goes through a work
+branch and a PR into that server branch:
+
+```bash
+git fetch origin && git switch -c work/<nn>-<service>-<flavour>-<topic> origin/mcp/<nn>-<service>-<flavour>
+# ... commit and push as often as you like
+git push -u origin work/<nn>-<service>-<flavour>-<topic>
+gh pr create --base mcp/<nn>-<service>-<flavour>   # the base is the server branch, never main
+# after the owner merges (merge commit) and CI is green:
+git push origin --delete work/<nn>-<service>-<flavour>-<topic>
+git switch mcp/<nn>-<service>-<flavour> && git pull && git branch -D work/<nn>-<service>-<flavour>-<topic>
+```
+
+One work branch per piece of work, not per commit. If a PR into `main` ever appears, close it
+without merging.
+
 ## 6. Update the index on `main`
 
 ```bash

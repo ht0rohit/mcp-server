@@ -3,6 +3,11 @@
 Decisions made on the owner's behalf, newest first, one line each with the reason. Revisit any
 of them by changing the code and striking the line through.
 
+## 2026-09-30: work branches
+
+- **Server branches change only through PRs from `work/...` branches**, merged with a merge commit, and the work branch is deleted after the merge. Asked by the owner after PR #3 put the Redis server on `main` (reverted in `b3b17b1`).
+- **Work branches use the `work/` prefix**: git refuses `mcp/<server>/<topic>` while `mcp/<server>` exists.
+
 ## 2026-09-30: review of servers 01 and 02
 
 - **CI runs on `mcp/**` pushes.** Server branches are never PR'd, so without it their tests never ran in CI.

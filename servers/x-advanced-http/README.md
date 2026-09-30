@@ -47,6 +47,8 @@ The two write tools only appear when `X_USER_ACCESS_TOKEN` is set.
 
 ## How the code is organized
 
+`OVERVIEW.md` walks through the code with flow diagrams.
+
 ```
 src/x_advanced_http/
 ├── server.py   # the MCP part: tools, resources, prompts, completions, middleware,

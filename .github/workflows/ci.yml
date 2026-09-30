@@ -5,6 +5,7 @@ on:
     branches: [main, "mcp/**"]
   pull_request:
 
+# Each server branch holds one server at the repo root; main holds none.
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -13,10 +14,10 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - name: Install every server in the workspace
-        run: uv sync --all-packages --locked
+      - name: Install the server and the dev tools
+        run: uv sync --locked
       - name: Lint
         run: uv run ruff check . && uv run ruff format --check .
       - name: Test
-        # Exit code 5 means "no tests collected", which is expected on a bare main.
+        # Exit code 5 means "no tests collected", which is expected on main (no server).
         run: uv run pytest -q || [ $? -eq 5 ]

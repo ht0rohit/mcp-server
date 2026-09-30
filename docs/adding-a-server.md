@@ -6,22 +6,36 @@ Each server lives on its own branch and is never merged into `main`. See the bra
 ## 1. Cut the branch
 
 ```bash
-git switch main && git pull && git clean -fdX servers/
+git switch main && git pull
 git switch -c mcp/<nn>-<service>-<flavour>          # <nn> = next free number
 ```
 
-To build on an earlier server, cut from its branch instead of `main`.
+To build on an earlier server, cut from its branch instead of `main`, then remove that server's
+`src/<package>/` and `tests/` once the new ones replace them.
 
 ## 2. Create the package
 
+The server lives at the repo root. Turn the starter `pyproject.toml` into the server's project:
+set `name` (`<service>-<flavour>`), `version` and `description`, delete `[tool.uv] package = false`,
+and add the build backend and the console script:
+
+```toml
+[project.scripts]
+<service>-<flavour> = "<package>:main"
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
+```
+
 ```bash
-uv init --package --name <service>-<flavour> servers/<service>-<flavour>
-uv add --package <service>-<flavour> "mcp>=2.2,<3"
+uv add "mcp>=2.2,<3"
 ```
 
 Shape it like the earlier servers: `src/<package>/server.py` with a `main()` that the
-`[project.scripts]` entry points to, a `README.md`, a `CLAUDE.md` with guidance for this server
-only, a `.env.example` and a `tests/` folder.
+`[project.scripts]` entry points to, a `tests/` folder, a `.env.example`, a `.claude/CLAUDE.md`
+with guidance for this server only, and a `README.md` for the server that replaces main's
+index README on this branch.
 
 ## 3. Test without network or secrets
 
@@ -30,7 +44,7 @@ only, a `.env.example` and a `tests/` folder.
 - One smoke test that spawns the real process (stdio) or starts the app (HTTP)
 
 ```bash
-uv sync --all-packages && uv run ruff check . && uv run ruff format --check . && uv run pytest
+uv sync && uv run ruff check . && uv run ruff format --check . && uv run pytest
 ```
 
 ## 4. Review before calling it done
@@ -80,10 +94,14 @@ git switch mcp/<nn>-<service>-<flavour> && git pull && git branch -D work/<nn>-<
 One work branch per piece of work, not per commit. If a PR into `main` ever appears, close it
 without merging.
 
+Cloud Claude sessions cannot delete remote branches (the git proxy answers `403`), so the owner
+deletes the work branch with the PR page's "Delete branch" button, or turns on
+Settings → General → "Automatically delete head branches".
+
 ## 6. Update the index on `main`
 
 ```bash
-git switch main && git clean -fdX servers/
+git switch main
 # README.md: add a row to the server index
 # docs/roadmap.md: set the server's status and branch
 # docs/learnings.md: add what the server teaches

@@ -10,7 +10,7 @@ when a server branch is pushed.
 | # | Server | Transport | New ideas | Branch |
 |---|---|---|---|---|
 | 01 | X basic | stdio | Tools, resources, resource templates, prompts, lifespan, tool annotations, `ToolError`, validated arguments, cursor pagination, offline tests | [`mcp/01-x-basic-stdio`](../../../tree/mcp/01-x-basic-stdio) |
-| 02 | X advanced | stdio | Structured output, progress, logging, completions, elicitation, sampling | In progress |
+| 02 | X advanced | Streamable HTTP | Structured output, progress, completions, elicitation to confirm writes, subscriptions, bearer-token auth with per-tool scopes, health route, Host allowlist, middleware, safe retries, app factory | [`mcp/02-x-advanced`](../../../tree/mcp/02-x-advanced) |
 | 03 | HTTP | Streamable HTTP | The same ideas over HTTP: stateless mode, bearer-token auth, health route, running behind a URL | In progress |
 | 04 | Production | Streamable HTTP | OAuth, middleware, OpenTelemetry, subscriptions, caching hints, deployment | Planned |
 

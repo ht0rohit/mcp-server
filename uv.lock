@@ -9,7 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "mcp-server-lab",
-    "x-basic-stdio",
+    "x-advanced-http",
 ]
 
 [[package]]
@@ -784,16 +784,18 @@ wheels = [
 ]
 
 [[package]]
-name = "x-basic-stdio"
+name = "x-advanced-http"
 version = "0.1.0"
-source = { editable = "servers/x-basic-stdio" }
+source = { editable = "servers/x-advanced-http" }
 dependencies = [
     { name = "httpx" },
     { name = "mcp" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "mcp", specifier = ">=2.2,<3" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]

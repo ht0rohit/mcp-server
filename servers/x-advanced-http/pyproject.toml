@@ -1,7 +1,7 @@
 [project]
-name = "x-basic-stdio"
+name = "x-advanced-http"
 version = "0.1.0"
-description = "Basic read-only X (Twitter) MCP server over stdio"
+description = "Advanced X (Twitter) MCP server over Streamable HTTP"
 readme = "README.md"
 authors = [
     { name = "Rohit Kr Singh", email = "ht97kumarrk@gmail.com" }
@@ -10,10 +10,11 @@ requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28",
     "mcp>=2.2,<3",
+    "uvicorn>=0.30",
 ]
 
 [project.scripts]
-x-basic-stdio = "x_basic_stdio:main"
+x-advanced-http = "x_advanced_http:main"
 
 [build-system]
 requires = ["uv_build>=0.8.17,<0.9.0"]

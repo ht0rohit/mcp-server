@@ -47,6 +47,13 @@ POSTS = {
             "quote_count": 0,
         },
     },
+    # A long post: X cuts `text` at 280 characters and puts the full text in `note_tweet`.
+    "1700000000000000001": {
+        "id": "1700000000000000001",
+        "text": "A long post that X cuts short…",
+        "note_tweet": {"text": "A long post that X cuts short, full ending here."},
+        "author_id": "2244994945",
+    },
 }
 AUTHORS = {"users": [{"id": "2244994945", "username": "XDevelopers"}, ME]}
 
@@ -84,6 +91,7 @@ class FakeX:
         self.requests: list[httpx.Request] = []
         self.created: list[dict] = []
         self.fail_next: list[int] = []  # status codes to return before answering normally
+        self.delete_reports_deleted = True  # False: X answers `deleted: false`
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -98,6 +106,8 @@ class FakeX:
             return httpx.Response(200, json={"data": ME})
         if path.startswith("/users/by/username/"):
             name = path.rsplit("/", 1)[1]
+            if name == "ratelimited":
+                return httpx.Response(429, headers={"x-rate-limit-reset": "9999999999"}, json={})
             user = USERS.get(name.lower())
             return httpx.Response(200, json={"data": user} if user else not_found(name))
         if path == "/users/by":
@@ -113,7 +123,7 @@ class FakeX:
             return httpx.Response(201, json={"data": {"id": "5555", "text": "posted"}})
         if path.startswith("/tweets/") and request.method == "DELETE":
             assert auth == "Bearer user-token"
-            return httpx.Response(200, json={"data": {"deleted": True}})
+            return httpx.Response(200, json={"data": {"deleted": self.delete_reports_deleted}})
         if path == "/tweets/search/recent":
             query = params["query"]
             if query == "rate-limited":
@@ -133,7 +143,7 @@ class FakeX:
             if found := [POSTS[i] for i in ids if i in POSTS]:
                 body |= {"data": found, "includes": AUTHORS}
             return httpx.Response(200, json=body)
-        if path.endswith("/tweets") or path == "/tweets/search/recent":
+        if path.endswith(("/tweets", "/mentions")) or path == "/tweets/search/recent":
             page = {"data": list(POSTS.values()), "includes": AUTHORS, "meta": {"result_count": 1}}
             if "pagination_token" not in params and "next_token" not in params:
                 page["meta"]["next_token"] = "page2"

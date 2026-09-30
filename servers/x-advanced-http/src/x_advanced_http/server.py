@@ -35,7 +35,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.context import CallNext, HandlerResult, ServerRequestContext
 from mcp.server.mcpserver import Context, Elicit, MCPServer, RequestStateSecurity, Resolve
-from mcp.server.mcpserver.exceptions import ResourceNotFoundError, ToolError
+from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError, ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import (
     Completion,
@@ -51,7 +51,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .auth import StaticTokenVerifier, require_scope
-from .client import UserCache, XApiError, XClient
+from .client import UserCache, XApiError, XClient, XNotFoundError
 from .config import READ_SCOPE, WRITE_SCOPE, Config, ConfigError
 from .models import (
     AuthorCount,
@@ -85,6 +85,7 @@ class AppContext:
     x: XClient  # app-only token: reads
     x_user: XClient | None  # user-context token: writes and "me"; None if not configured
     users: UserCache
+    me_id: str | None = None  # the signed-in account's ID, looked up once
 
 
 def app_context(ctx: Context) -> AppContext:
@@ -229,6 +230,18 @@ async def x_get_user_posts(
     return post_page(body)
 
 
+@tool("List a user's mentions", READ_ONLY)
+async def x_get_user_mentions(
+    username: Username,
+    ctx: Context,
+    max_results: Annotated[int, Field(ge=5, le=100, description="Posts per page (5-100)")] = 10,
+    cursor: Cursor = None,
+) -> PostPage:
+    """List recent posts that mention an X user, newest first. Returns next_cursor for more."""
+    user = await lookup_user(ctx, username)
+    return post_page(await app_context(ctx).x.user_mentions(user["id"], max_results, cursor))
+
+
 @tool("Search recent X posts", READ_ONLY)
 async def x_search_recent_posts(
     query: Query,
@@ -314,7 +327,17 @@ async def confirm_delete(
 
 @tool("Publish an X post", PUBLISHES, writes=True)
 async def x_create_post(
-    text: Annotated[str, Field(min_length=1, max_length=280, description="Post text")],
+    text: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=25_000,
+            description=(
+                "Post text. X allows 280 weighted characters (URLs count 23, emoji and CJK 2) "
+                "or more on Premium; X itself rejects a post that is too long."
+            ),
+        ),
+    ],
     ctx: Context,
     x: Annotated[XClient, Resolve(writer)],
     confirmation: Annotated[Confirmation, Resolve(confirm_create)],
@@ -346,7 +369,14 @@ async def x_delete_post(
         return PostResult(status="cancelled", post_id=post_id)
     body = await x.delete_post(post_id)
     if not body.get("data", {}).get("deleted"):
-        raise XApiError(f"X did not delete post {post_id}.")
+        # A retried DELETE sees `deleted: false` when the first attempt already worked but its
+        # response was lost. If the post is gone, the delete succeeded.
+        try:
+            await app_context(ctx).x.post(post_id)
+        except XNotFoundError:
+            pass
+        else:
+            raise XApiError(f"X did not delete post {post_id}.")
     await ctx.notify_resource_updated(MY_POSTS_URI)
     return PostResult(status="deleted", post_id=post_id)
 
@@ -383,16 +413,20 @@ def search_operators() -> str:
 async def user_profile(username: str, ctx: Context) -> str:
     try:
         user = await lookup_user(ctx, username)
-    except XApiError as exc:
+    except XNotFoundError as exc:
         raise ResourceNotFoundError(str(exc)) from exc
+    except XApiError as exc:
+        # Rate limits, auth and network failures are not "not found".
+        raise ResourceError(str(exc)) from exc
     return User.from_x(user).model_dump_json(indent=2)
 
 
 async def read_my_posts(state: AppContext) -> str:
     """The signed-in account's latest posts, as JSON."""
     assert state.x_user is not None  # only registered when a user token exists
-    me = (await state.x_user.me())["data"]
-    body = await state.x_user.user_posts(me["id"], 10, None, None)
+    if state.me_id is None:
+        state.me_id = (await state.x_user.me())["data"]["id"]
+    body = await state.x_user.user_posts(state.me_id, 10, None, None)
     return post_page(body).model_dump_json(indent=2)
 
 
@@ -471,7 +505,8 @@ async def log_requests(ctx: ServerRequestContext, call_next: CallNext) -> Handle
 # --- 7. The factory -----------------------------------------------------------------------
 
 INSTRUCTIONS = (
-    "Access to X (Twitter): look up users and posts, list a user's posts, search the last 7 "
+    "Access to X (Twitter): look up users and posts, list a user's posts and mentions, "
+    "search the last 7 "
     "days, and digest a search into top posts and authors. Usernames may include '@'. "
     "List tools return next_cursor when more results exist; pass it back as cursor. "
     "Read x://guides/search-operators before writing complex search queries."
@@ -515,6 +550,9 @@ def create_server(config: Config) -> MCPServer:
         lifespan=lifespan,
         # Every request needs a valid token with x:read. Write tools check x:write themselves.
         token_verifier=StaticTokenVerifier(config.auth_tokens, resource=config.public_url),
+        # The protected-resource metadata must name an authorization server, so it names this
+        # server. That is a placeholder: nothing here issues tokens, and clients send a static
+        # `Authorization: Bearer ...` header. A real authorization server replaces it later.
         auth=AuthSettings(
             issuer_url=AnyHttpUrl(config.public_url),
             resource_server_url=AnyHttpUrl(config.public_url),
@@ -604,14 +642,11 @@ def main(argv: list[str] | None = None) -> None:
 
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(levelname)s %(message)s")
     try:
-        config = Config.from_env()
+        # Flags go through from_env, so defaults derived from the port (the public URL) follow.
+        config = Config.from_env(host=args.host, port=args.port)
     except ConfigError as exc:
         print(f"{NAME}: {exc}", file=sys.stderr)
         sys.exit(1)
-    if args.port is not None:
-        config = Config(**{**config.__dict__, "port": args.port})
-    if args.host is not None:
-        config = Config(**{**config.__dict__, "host": args.host})
 
     import uvicorn
 

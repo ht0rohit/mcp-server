@@ -21,7 +21,8 @@ API_BASE = "https://api.x.com/2"
 USER_AGENT = "x-advanced-http-mcp"
 
 USER_FIELDS = "created_at,description,location,public_metrics,verified,url"
-POST_FIELDS = "created_at,author_id,public_metrics,conversation_id,lang"
+# `note_tweet` holds the full text of posts over 280 characters; `text` is cut short for them.
+POST_FIELDS = "created_at,author_id,public_metrics,conversation_id,lang,note_tweet"
 
 # Statuses worth one more try: the request never reached X's application logic, or X said so.
 RETRY_STATUSES = {502, 503, 504}
@@ -30,6 +31,10 @@ RETRY_BACKOFF = 0.5  # seconds before the first retry; doubles each time
 
 class XApiError(ToolError):
     """An X API failure, worded so the model can decide what to do next."""
+
+
+class XNotFoundError(XApiError):
+    """The user or post does not exist. Resources map this, and only this, to "not found"."""
 
 
 class XClient:
@@ -125,6 +130,10 @@ class XClient:
         params = {"max_results": max_results, "pagination_token": cursor, "exclude": exclude}
         return await self.get(f"/users/{user_id}/tweets", {**params, **post_params()})
 
+    async def user_mentions(self, user_id: str, max_results: int, cursor: str | None) -> dict:
+        params = {"max_results": max_results, "pagination_token": cursor}
+        return await self.get(f"/users/{user_id}/mentions", {**params, **post_params()})
+
     async def search_recent(
         self, query: str, max_results: int, cursor: str | None, sort_order: str
     ) -> dict[str, Any]:
@@ -172,9 +181,12 @@ class UserCache:
         return item[1]
 
     def put(self, user: dict[str, Any]) -> None:
+        key = user["username"].lower()
+        # Re-insert refreshed keys at the end, so the first key is always the oldest entry.
+        self._items.pop(key, None)
         if len(self._items) >= self._max_size:
-            self._items.pop(next(iter(self._items)))  # drop the oldest entry
-        self._items[user["username"].lower()] = (time.monotonic() + self._ttl, user)
+            self._items.pop(next(iter(self._items)))
+        self._items[key] = (time.monotonic() + self._ttl, user)
 
     def handles(self, prefix: str = "") -> list[str]:
         now = time.monotonic()
@@ -193,7 +205,7 @@ def post_params() -> dict[str, str]:
 def require_data(body: dict[str, Any], not_found: str) -> dict[str, Any]:
     # X answers HTTP 200 with an `errors` array (and no `data`) when an item does not exist.
     if "data" not in body:
-        raise XApiError(not_found)
+        raise XNotFoundError(not_found)
     return body
 
 
@@ -217,7 +229,10 @@ def describe_http_error(response: httpx.Response, token_env: str) -> str:
     if status == 404:
         return "X could not find that resource."
     if status == 429:
-        reset = response.headers.get("x-rate-limit-reset")
-        when = f" The limit resets at Unix time {reset}." if reset else ""
+        when = ""
+        reset = response.headers.get("x-rate-limit-reset", "")
+        if reset.isdigit():
+            # Models convert Unix times poorly, so say how long to wait instead.
+            when = f" It resets in {max(0, int(reset) - int(time.time()))} seconds."
         return f"X rate limit reached.{when} Wait before retrying."
     return f"X API error {status}. {detail}".strip()

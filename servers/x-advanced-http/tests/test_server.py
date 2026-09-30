@@ -7,9 +7,10 @@ from dataclasses import replace
 
 import anyio
 import pytest
-from mcp import Client
+from mcp import Client, MCPError
 from mcp.client.subscriptions import ResourceUpdated
 from mcp.types import ElicitResult, PromptReference, ResourceTemplateReference
+from mcp_types import INTERNAL_ERROR, INVALID_PARAMS
 from x_advanced_http import server
 
 pytestmark = pytest.mark.anyio
@@ -20,6 +21,7 @@ READ_TOOLS = {
     "x_get_post",
     "x_get_posts",
     "x_get_user_posts",
+    "x_get_user_mentions",
     "x_search_recent_posts",
     "x_search_digest",
 }
@@ -106,6 +108,31 @@ async def test_errors_are_tool_errors_the_model_can_read(client):
 
     limited = await client.call_tool("x_search_recent_posts", {"query": "rate-limited"})
     assert limited.is_error and "rate limit" in text(limited)
+    assert "resets in 0 seconds" in text(limited)  # the reset time in the fake is in the past
+
+
+async def test_mentions_like_server_01(client, fake_x):
+    result = await client.call_tool("x_get_user_mentions", {"username": "XDevelopers"})
+    assert not result.is_error, text(result)
+    assert fake_x.requests[-1].url.path == "/2/users/2244994945/mentions"
+    assert result.structured_content["next_cursor"] == "page2"
+
+
+async def test_long_posts_show_their_full_text(client):
+    result = await client.call_tool("x_get_post", {"post_id": "1700000000000000001"})
+    assert result.structured_content["text"] == "A long post that X cuts short, full ending here."
+
+
+async def test_only_a_missing_user_is_resource_not_found(client):
+    # ResourceNotFoundError reaches the client as -32602; any other ResourceError as -32603.
+    with pytest.raises(MCPError) as missing:
+        await client.read_resource("x://users/nobody_here")
+    assert missing.value.error.code == INVALID_PARAMS
+
+    with pytest.raises(MCPError) as limited:
+        await client.read_resource("x://users/ratelimited")
+    assert limited.value.error.code == INTERNAL_ERROR
+    assert "rate limit" in limited.value.error.message
 
 
 async def test_invalid_arguments_never_reach_x(client, fake_x):
@@ -211,6 +238,25 @@ async def test_delete_post_is_confirmed(client, fake_x, answers):
     assert fake_x.requests[-1].method == "DELETE"
 
 
+async def test_posts_longer_than_280_code_points_reach_x(client, fake_x):
+    # X weights characters and Premium allows more, so X, not the schema, decides.
+    result = await client.call_tool("x_create_post", {"text": "a" * 300})
+    assert result.structured_content["status"] == "posted"
+
+
+async def test_delete_reported_as_not_deleted_but_gone_is_a_success(client, fake_x):
+    # What a retried DELETE sees when the first attempt worked but its response was lost.
+    fake_x.delete_reports_deleted = False
+    result = await client.call_tool("x_delete_post", {"post_id": "5555"})  # unknown to X
+    assert result.structured_content["status"] == "deleted"
+
+
+async def test_delete_reported_as_not_deleted_and_still_there_fails(client, fake_x):
+    fake_x.delete_reports_deleted = False
+    result = await client.call_tool("x_delete_post", {"post_id": "1460323737035677698"})
+    assert result.is_error and "did not delete" in text(result)
+
+
 async def test_writes_notify_subscribers_of_my_posts(client, fake_x):
     async with client.listen(resource_subscriptions=["x://me/posts"]) as events:
         await client.call_tool("x_create_post", {"text": "Ping"})
@@ -221,6 +267,8 @@ async def test_writes_notify_subscribers_of_my_posts(client, fake_x):
 
     posts = await client.read_resource("x://me/posts")
     assert json.loads(posts.contents[0].text)["posts"]
+    await client.read_resource("x://me/posts")
+    assert [r.url.path for r in fake_x.requests].count("/2/users/me") == 1  # ID looked up once
 
 
 # --- Resources, prompts, completions ------------------------------------------------------

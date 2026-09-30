@@ -63,11 +63,24 @@ in `create_server()` too.
   in-process app. Test legacy clients in-memory (`Client(server, mode="legacy")`) or against the
   real process (`test_process.py`).
 - Progress must only increase, and `report_progress` is a no-op when the client didn't ask.
+- The auth metadata names this server as its own authorization server (`issuer_url`). It is a
+  placeholder for static tokens; an OAuth-aware client that follows discovery will not find
+  `/authorize`. Configure clients with the `Authorization` header.
+- `UserCache` (and so username completions) is shared by every caller and token. Fine for a
+  personal server; key it by `client_id` before sharing the server.
+- CLI flags go through `Config.from_env(host=..., port=...)` so defaults derived from them (the
+  public URL) follow. Don't patch a built `Config`.
+- A retried DELETE can answer `deleted: false` for a post the first attempt deleted;
+  `x_delete_post` checks with a lookup before reporting failure.
+- Keep parity with server 01's read tools (including `x_get_user_mentions`); explain any
+  difference in the README.
 
 ## X API facts the code relies on
 
 Everything in server 01's CLAUDE.md, plus:
 
+- Don't cap post length locally: X counts weighted characters (URLs 23, emoji and CJK 2) and
+  Premium allows more. X's 400 message tells the model what was wrong.
 - Writes need an OAuth 2.0 user access token (`tweet.write`); the app-only bearer token is
   read-only. `POST /2/tweets` returns `201` with `data.id`; `DELETE /2/tweets/:id` returns
   `data.deleted`.

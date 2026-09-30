@@ -38,7 +38,15 @@ class Config:
         return bool(self.x_user_access_token)
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
+    def from_env(
+        cls,
+        env: Mapping[str, str] | None = None,
+        *,
+        host: str | None = None,
+        port: int | None = None,
+    ) -> Config:
+        """Read the environment. `host` and `port` (from CLI flags) override it before the
+        defaults that depend on them, like the public URL, are worked out."""
         env = os.environ if env is None else env
 
         def get(name: str) -> str:
@@ -48,16 +56,17 @@ class Config:
         if not x_bearer_token:
             raise ConfigError("X_BEARER_TOKEN is not set. Create an app at developer.x.com.")
 
-        try:
-            port = int(get("MCP_PORT") or 8000)
-        except ValueError as exc:
-            raise ConfigError("MCP_PORT must be a number.") from exc
+        if port is None:
+            try:
+                port = int(get("MCP_PORT") or 8000)
+            except ValueError as exc:
+                raise ConfigError("MCP_PORT must be a number.") from exc
 
         return cls(
             x_bearer_token=x_bearer_token,
             x_user_access_token=get("X_USER_ACCESS_TOKEN") or None,
             auth_tokens=parse_auth_tokens(get("MCP_AUTH_TOKENS")),
-            host=get("MCP_HOST") or "127.0.0.1",
+            host=host or get("MCP_HOST") or "127.0.0.1",
             port=port,
             public_url=parse_public_url(get("MCP_PUBLIC_URL") or f"http://127.0.0.1:{port}/mcp"),
             allowed_hosts=split_list(get("MCP_ALLOWED_HOSTS")),

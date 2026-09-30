@@ -72,7 +72,8 @@ class Post(BaseModel):
             id=data["id"],
             author=author,
             created_at=data.get("created_at"),
-            text=data.get("text", ""),
+            # Long posts carry their full text in `note_tweet`; `text` stops at 280 characters.
+            text=data.get("note_tweet", {}).get("text") or data.get("text", ""),
             lang=data.get("lang"),
             likes=m.get("like_count", 0),
             reposts=m.get("retweet_count", 0),

@@ -5,27 +5,32 @@ What is different from a stdio server, all in this file:
 1. A lifespan that opens one Redis pool for the whole process.   -> `lifespan()`
 2. The server object.                                           -> `mcp = MCPServer(...)`
 3. Tools with typed input and output.                           -> `@mcp.tool(...)`
-4. Serving over HTTP at a URL, stateless.                       -> `main()`
+4. Resources: data a client can read by URI.                    -> `@mcp.resource(...)`
+5. A plain HTTP health route next to the MCP endpoint.          -> `@mcp.custom_route(...)`
+6. Serving over HTTP at a URL, stateless.                       -> `main()`
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated
 
 from mcp.server.mcpserver import Context, MCPServer
-from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError, ToolError
 from mcp_types import ToolAnnotations
 from pydantic import Field
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from .cache import RedisCache
 from .config import Settings, get_settings
-from .models import CacheEntry, DeleteResult, KeyPage, SetResult
+from .models import CacheEntry, CacheStats, DeleteResult, KeyPage, SetResult
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +42,12 @@ logger = logging.getLogger(__name__)
 class AppContext:
     cache: RedisCache
     settings: Settings
+
+
+# Two handlers get no `ctx`: the health route (plain HTTP, outside MCP) and static resources
+# (the SDK only injects Context into templated ones). The lifespan publishes the running cache
+# here for them; everything else reads it from `ctx`.
+_running: dict[str, RedisCache] = {}
 
 
 def make_redis(settings: Settings) -> Redis:
@@ -64,9 +75,12 @@ async def lifespan(_server: MCPServer) -> AsyncIterator[AppContext]:
         await redis.aclose()
         raise RuntimeError(f"Cannot reach Redis at {settings.redis_url}: {exc}") from exc
     logger.info("Connected to Redis; keys are prefixed with %r", settings.cache_key_prefix)
+    cache = RedisCache(redis, settings.cache_key_prefix)
+    _running["cache"] = cache
     try:
-        yield AppContext(cache=RedisCache(redis, settings.cache_key_prefix), settings=settings)
+        yield AppContext(cache=cache, settings=settings)
     finally:
+        _running.clear()
         await redis.aclose()
 
 
@@ -96,8 +110,9 @@ mcp = MCPServer(
 # - Flat, annotated arguments: the limits (`pattern`, `ge`, `max_length`) land in the input
 #   schema, and the SDK rejects bad input before our code runs.
 # - Annotations are honest hints for the client (and the human approving calls).
-# - A cache miss is a normal answer (`found: false`), not an error. `ToolError` is for real
-#   failures: Redis unreachable, or input only the server can judge (a TTL over the limit).
+# - A cache miss is a normal answer (`found: false`), not an error. Errors are for real
+#   failures: `ToolError` for input only the server can judge (a TTL over the limit), and
+#   `CacheUnavailableError` (see cache.py) when Redis is unreachable.
 # - Typed return models give every tool an `outputSchema` and structured JSON results.
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
@@ -200,7 +215,61 @@ async def cache_list_keys(
     )
 
 
-# --- 4. Running over Streamable HTTP ------------------------------------------------------
+# --- 4. Resources -------------------------------------------------------------------------
+#
+# Tools are actions the model chooses to call; resources are data the user or app attaches as
+# context, like opening a file. Resources only read. Failures use resource errors:
+# ResourceNotFoundError when the URI names nothing, ResourceError for everything else.
+
+NAMESPACE_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+KEY_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,200}$")
+
+
+@mcp.resource(
+    "cache://stats",
+    title="Cache stats",
+    description="Redis version, memory, hit rate, and how many keys this server owns",
+    mime_type="application/json",
+)
+async def cache_stats() -> str:
+    running = _running.get("cache")
+    if running is None:
+        raise ResourceError("The server is not connected to Redis.")
+    return CacheStats.model_validate(await running.stats()).model_dump_json(indent=2)
+
+
+@mcp.resource(
+    "cache://{namespace}/{key}",
+    title="Cached value",
+    description="The value stored under namespace/key, as stored (often JSON)",
+    mime_type="text/plain",
+)
+async def cached_value(namespace: str, key: str, ctx: Context) -> str:
+    # URI parts skip the tool argument schemas, so validate them here the same way.
+    if not NAMESPACE_RE.match(namespace) or not KEY_RE.match(key):
+        raise ResourceError("Namespace may use letters, digits, _ and -; key also . and :")
+    value, _ttl = await cache(ctx).get(namespace, key)
+    if value is None:
+        raise ResourceNotFoundError(f"No cached value at cache://{namespace}/{key}")
+    return value
+
+
+# --- 5. Health check ----------------------------------------------------------------------
+#
+# Plain HTTP for Docker, Kubernetes or a load balancer: 200 when Redis answers, 503 when not.
+# It stays open when auth is added (orchestrators do not send tokens), so it reveals nothing
+# beyond ok / not ok.
+
+
+@mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
+async def healthz(_request: Request) -> JSONResponse:
+    running = _running.get("cache")
+    if running is not None and await running.ping():
+        return JSONResponse({"status": "ok"})
+    return JSONResponse({"status": "unavailable"}, status_code=503)
+
+
+# --- 6. Running over Streamable HTTP ------------------------------------------------------
 
 
 def main() -> None:

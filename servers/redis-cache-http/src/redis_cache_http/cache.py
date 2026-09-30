@@ -10,7 +10,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ResourceError
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -21,18 +21,29 @@ logger = logging.getLogger(__name__)
 MAX_SCAN_ROUNDS = 10
 
 
+class CacheUnavailableError(ResourceError):
+    """Redis could not be reached or failed.
+
+    A `ResourceError` is an anticipated failure on both surfaces: a resource read returns it
+    as a protocol error, and a tool that lets it escape returns `is_error: true`, exactly
+    like `ToolError`. So one exception serves tools and resources alike.
+    """
+
+
 @asynccontextmanager
 async def redis_errors() -> AsyncIterator[None]:
-    """Turn Redis failures into a clean ToolError.
+    """Turn Redis failures into a clean, anticipated error.
 
-    The full error (which can include host names) goes to the server log; the model only sees
-    a short message it can act on.
+    The full error (which can include host names) goes to the server log; the client only
+    sees a short message it can act on.
     """
     try:
         yield
     except RedisError as exc:
         logger.warning("Redis call failed: %r", exc)
-        raise ToolError("The cache is unavailable right now; try again shortly.") from exc
+        raise CacheUnavailableError(
+            "The cache is unavailable right now; try again shortly."
+        ) from exc
 
 
 class RedisCache:
@@ -66,6 +77,35 @@ class RedisCache:
         async with redis_errors():
             # UNLINK frees memory in the background, so a big value never stalls Redis.
             return await self.redis.unlink(self._full_key(namespace, key)) > 0
+
+    async def ping(self) -> bool:
+        try:
+            return bool(await self.redis.ping())
+        except RedisError:
+            return False
+
+    async def stats(self) -> dict[str, object]:
+        """Server-wide Redis numbers plus how many keys this server's prefix owns."""
+        async with redis_errors():
+            info = await self.redis.info()
+            owned, cursor = 0, 0
+            for _ in range(MAX_SCAN_ROUNDS):
+                cursor, batch = await self.redis.scan(cursor, match=f"{self.prefix}:*", count=1000)
+                owned += len(batch)
+                if cursor == 0:
+                    break
+        hits, misses = info.get("keyspace_hits", 0), info.get("keyspace_misses", 0)
+        return {
+            "redis_version": info.get("redis_version"),
+            "used_memory_human": info.get("used_memory_human"),
+            "keyspace_hits": hits,
+            "keyspace_misses": misses,
+            "hit_rate": round(hits / (hits + misses), 3) if hits + misses else None,
+            "key_prefix": self.prefix,
+            "owned_keys": owned,
+            # False when the bounded SCAN stopped early: owned_keys is then a lower bound.
+            "owned_keys_complete": cursor == 0,
+        }
 
     async def list_keys(
         self, namespace: str, pattern: str, cursor: int, limit: int

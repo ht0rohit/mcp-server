@@ -1,29 +1,34 @@
-# Workspace root. It is not a package itself: it only ties the servers together so one
-# `uv sync` installs every server plus the shared dev tools, with a single uv.lock.
 [project]
-name = "mcp-server-lab"
-version = "0.0.0"
-description = "Learning Python MCP best practices, one server at a time"
+name = "redis-cache-http"
+version = "0.1.0"
+description = "Redis cache MCP server over Streamable HTTP"
+readme = "README.md"
+authors = [
+    { name = "Rohit Kr Singh", email = "ht97kumarrk@gmail.com" }
+]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "mcp>=2.2,<3",
+    "pydantic-settings>=2.6",
+    "redis>=5.2,<7",
+]
 
-[tool.uv]
-package = false
+[project.scripts]
+redis-cache-http = "redis_cache_http:main"
 
-[tool.uv.workspace]
-members = ["servers/*"]
-exclude = ["servers/.gitkeep"]
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "fakeredis>=2.26",
     "pytest>=8",
     "ruff>=0.6",
 ]
 
 [tool.pytest.ini_options]
-# Each server has its own tests/ folder; --import-mode=importlib lets them share file names.
-addopts = "--import-mode=importlib"
-testpaths = ["servers"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100

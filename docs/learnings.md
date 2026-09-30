@@ -8,7 +8,7 @@ server teaches something new.
 - **Use mcp v2 and pin the major version.** `MCPServer` replaced v1's `FastMCP`, and
   `mcp.server.fastmcp` now raises on import. Pin `mcp>=2.2,<3` and commit `uv.lock`.
 
-## Server design (01 `x-basic-stdio`)
+## Server design (branch `mcp/01-x-basic-stdio`)
 
 - **Write `instructions`.** They reach the model once per session: say what the server is for
   and how its tools fit together (for example "pass the cursor back for the next page").

@@ -34,6 +34,8 @@ the official Python SDK v2 (`MCPServer`).
 
 ## How the code is organized
 
+`CLAUDE.md` in this folder has the scope, file map and how to add a tool.
+
 ```
 src/x_basic_stdio/
 ├── server.py      # the MCP part: server, lifespan, tools, resources, prompts, main()

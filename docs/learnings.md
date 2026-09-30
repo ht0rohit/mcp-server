@@ -19,12 +19,14 @@ server teaches something new.
   input schema and rejects bad input before your code runs.
 - **Annotate tools.** `ToolAnnotations(read_only_hint=True, idempotent_hint=True,
   open_world_hint=True)` lets clients skip confirmation for safe calls.
-- **Errors are errors.** Raise `ToolError` in tools and `ResourceNotFoundError` in resources.
+- **Errors are errors.** Raise `ToolError` in tools; in resources raise `ResourceNotFoundError`
+  only when the item is missing and `ResourceError` for anything else (rate limit, auth).
   Any other exception is a crash: the model only sees "Error executing tool <name>".
-- **Say what to do next in error messages** ("rate limit reached, resets at ...", "your plan may
+- **Say what to do next in error messages** ("rate limit reached, resets in 42 seconds", "your plan may
   not include this endpoint"), because the model reads them.
 - **Know the upstream API's quirks.** X returns HTTP 200 with an `errors` array for missing
-  items, and each endpoint has its own `max_results` range. Encode both, and test both.
+  items, each endpoint has its own `max_results` range, and long posts carry their full text
+  in `note_tweet` (`text` stops at 280 characters). Encode them, and test them.
 - **Batch tools beat loops.** `x_get_users` takes 100 handles, so the model makes one call, not 100.
 - **Paginate with a cursor and cap the size**, dropping whole items rather than cutting text.
 - **Plain-text tools set `structured_output=False`.** mcp v2 otherwise wraps a `str` return in
@@ -90,3 +92,26 @@ server teaches something new.
   starts the real process on a port.
 - **Test both protocol eras.** `Client(server, mode="legacy")` exercises 2025-11-25 sessions;
   the default negotiates 2026-07-28.
+
+## Reviewing (after servers 01 and 02)
+
+A second review found bugs in both servers after every test and lint passed. Why they were
+missed, and the habit that catches each:
+
+- **CI trigger drifted from the branch rule.** CI was written for PRs into `main`; the rule
+  later said server branches are never PR'd, and nobody re-read the workflow. When a process
+  rule changes, re-check everything that assumed the old one.
+- **Fakes encode the author's assumptions.** The fake X API never returned `note_tweet`, so the
+  truncation of long posts was invisible. Build fakes from the API docs, not from the code.
+- **Parity was assumed, not checked.** Server 02 lost a read tool from 01. Diff the tool lists
+  of a server and the one it builds on.
+- **Only the happy entry point was tested.** Tests built `Config` directly, never through the CLI
+  flags, so `--port` leaving the public URL behind went unnoticed. Test each entry point once.
+- **Advertised metadata was never read as a client would.** The RFC 9728 document names an
+  authorization server that doesn't exist. Read what you publish.
+- **Retries were reviewed apart from their side effects.** A retried DELETE can see its own
+  earlier success as a failure. For each retry, ask what if the first attempt worked.
+- **Local limits copied the upstream's number, not its rule.** X's 280 is weighted characters.
+
+The checklist form of this list is step 4 of [adding-a-server.md](adding-a-server.md).
+

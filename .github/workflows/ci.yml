@@ -1,7 +1,8 @@
 name: ci
 on:
+  # Server branches are pushed and never PR'd into main, so they must trigger CI on push.
   push:
-    branches: [main]
+    branches: [main, "mcp/**"]
   pull_request:
 
 jobs:

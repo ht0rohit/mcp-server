@@ -30,6 +30,13 @@ series that goes from a basic stdio server to advanced Streamable HTTP servers. 
   `git checkout origin/main -- CLAUDE.md docs/` then commit. (Merging `main` into
   `mcp/01-x-basic-stdio` would apply an old revert and delete the server.)
 
+## Before calling a server done
+
+Run the review checklist in `docs/adding-a-server.md` (step 4) and confirm CI ran on the pushed
+branch. Green local tests are not enough: the review of servers 01 and 02 found real bugs that
+every test passed over. When you decide something on the user's behalf, add one line to
+`docs/decisions.md`.
+
 ## Commits
 
 - Author every commit as the repo owner: `Rohit Kr Singh <ht97kumarrk@gmail.com>`.
@@ -47,7 +54,8 @@ main
 ├── docs/
 │   ├── roadmap.md            # the planned series, basic -> advanced, with status
 │   ├── adding-a-server.md    # step-by-step for a new server branch
-│   └── learnings.md          # best practices, grouped by the server that teaches them
+│   ├── learnings.md          # best practices, grouped by the server that teaches them
+│   └── decisions.md          # decisions made on the user's behalf, one line each
 └── servers/.gitkeep
 
 a server branch adds

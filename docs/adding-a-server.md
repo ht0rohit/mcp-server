@@ -22,14 +22,19 @@
    - HTTP to the upstream API: `httpx.MockTransport`
    - one smoke test that spawns the real process (stdio) or starts the app (HTTP)
 
-4. Check locally, then push and open a PR into `main`:
+4. Check locally, then push the branch. Server branches are not merged into `main`:
 
    ```bash
    uv sync --all-packages && uv run ruff check . && uv run ruff format --check . && uv run pytest
    ```
 
-5. In the same PR: add the server to the README index, tick it in `docs/roadmap.md`, and add any
-   new lessons to `docs/learnings.md`.
+   ```bash
+   git push -u origin mcp/<nn>-<service>-<flavour>
+   ```
+
+5. Update the shared files on `main` with a small PR from a separate branch (for example
+   `docs/index-<nn>`): add the server to the README index, tick it in `docs/roadmap.md`, and add
+   any new lessons to `docs/learnings.md`.
 
 ## stdio or Streamable HTTP?
 

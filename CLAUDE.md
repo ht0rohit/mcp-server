@@ -32,9 +32,12 @@ basic stdio server to advanced HTTP servers. See `docs/roadmap.md` for the order
 
 ## Workflow
 
-- `main` holds shared files and finished servers. Every new server starts on its own branch cut
-  from the latest `main`: `mcp/<nn>-<service>-<flavour>` (for example `mcp/01-x-basic-stdio`),
-  then goes to `main` through a pull request.
+- `main` holds only the shared files (this file, docs, CI, workspace config). It never holds a
+  server. Every server lives on its own branch cut from the latest `main`:
+  `mcp/<nn>-<service>-<flavour>` (for example `mcp/01-x-basic-stdio`). Server branches are
+  pushed, not merged into `main`.
+- Changes to shared files go to `main` through a small PR from a non-server branch. That
+  includes adding a server to the README index and the roadmap.
 - Server folders are `servers/<service>-<flavour>` (for example `servers/x-basic-stdio`), and the
   Python package is the same name with underscores.
 - Commits and PRs are authored by the repo owner only. Do not add `Co-Authored-By` trailers or
@@ -50,6 +53,10 @@ uv run ruff check . && uv run ruff format .
 uv run --package <name> <script>       # run a server (its README names the script)
 npx @modelcontextprotocol/inspector uv run --package <name> <script>   # try it in a browser
 ```
+
+After switching from a server branch back to `main`, run `git clean -fdX servers/`: ignored
+leftovers such as `__pycache__` keep the server folder alive, and uv then fails with "workspace
+member is missing a pyproject.toml".
 
 ## Conventions for MCP servers
 

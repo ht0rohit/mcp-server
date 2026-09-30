@@ -1,6 +1,6 @@
 # CLAUDE.md (redis-cache-http)
 
-Guidance for this server only. The root `CLAUDE.md` covers the repo-wide rules.
+Guidance for this server only. `CLAUDE.md` at the repo root covers the repo-wide rules.
 
 ## Files
 

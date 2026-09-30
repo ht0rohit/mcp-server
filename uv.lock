@@ -6,12 +6,6 @@ resolution-markers = [
     "python_full_version < '3.14'",
 ]
 
-[manifest]
-members = [
-    "mcp-server-lab",
-    "redis-cache-http",
-]
-
 [[package]]
 name = "annotated-types"
 version = "0.8.0"
@@ -328,25 +322,6 @@ wheels = [
 ]
 
 [[package]]
-name = "mcp-server-lab"
-version = "0.0.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.6" },
-]
-
-[[package]]
 name = "mcp-types"
 version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -590,7 +565,7 @@ wheels = [
 [[package]]
 name = "redis-cache-http"
 version = "0.1.0"
-source = { editable = "servers/redis-cache-http" }
+source = { editable = "." }
 dependencies = [
     { name = "mcp" },
     { name = "pydantic-settings" },
@@ -600,6 +575,8 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "fakeredis" },
+    { name = "pytest" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -610,7 +587,11 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "fakeredis", specifier = ">=2.26" }]
+dev = [
+    { name = "fakeredis", specifier = ">=2.26" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.6" },
+]
 
 [[package]]
 name = "referencing"

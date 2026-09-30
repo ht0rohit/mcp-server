@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
+
 from redis_cache_http.config import Settings, get_settings
 from redis_cache_http.server import main
 

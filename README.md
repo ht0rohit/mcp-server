@@ -17,6 +17,7 @@ are never merged back. To see or run a server, check out its branch.
 | # | Branch | Transport | What it shows |
 |---|---|---|---|
 | 01 | [`mcp/01-x-basic-stdio`](../../tree/mcp/01-x-basic-stdio) | stdio | Read-only X (Twitter) server: tools, resources, resource templates, prompts, lifespan |
+| 02 | [`mcp/02-x-advanced`](../../tree/mcp/02-x-advanced) | Streamable HTTP | X server end to end: bearer-token auth with scopes, structured output, progress, confirmed writes (elicitation), subscriptions, completions, middleware |
 
 The full plan is in [docs/roadmap.md](docs/roadmap.md).
 

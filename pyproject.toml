@@ -1,5 +1,7 @@
-# Workspace root. It is not a package itself: it only ties the servers together so one
-# `uv sync` installs every server plus the shared dev tools, with a single uv.lock.
+# Starter for a server branch. main holds no server, so this file only carries the shared dev
+# tools and the pytest and ruff config. A new server branch turns it into the server's own
+# project: set the name, description and dependencies, add [project.scripts] and
+# [build-system], and drop [tool.uv] package = false (see docs/adding-a-server.md).
 [project]
 name = "mcp-server-lab"
 version = "0.0.0"
@@ -10,10 +12,6 @@ dependencies = []
 [tool.uv]
 package = false
 
-[tool.uv.workspace]
-members = ["servers/*"]
-exclude = ["servers/.gitkeep"]
-
 [dependency-groups]
 dev = [
     "pytest>=8",
@@ -21,9 +19,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# Each server has its own tests/ folder; --import-mode=importlib lets them share file names.
-addopts = "--import-mode=importlib"
-testpaths = ["servers"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100

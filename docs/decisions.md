@@ -3,6 +3,13 @@
 Decisions made on the owner's behalf, newest first, one line each with the reason. Revisit any
 of them by changing the code and striking the line through.
 
+## 2026-09-30: flat server branches
+
+- **Each server branch holds its server at the repo root**, not in `servers/<name>/`. With one server per branch the workspace folder was an extra level of nesting; `src/<package>/` stays because tests then import the installed package.
+- **The server's guidance moves to `.claude/CLAUDE.md`**, so the root `CLAUDE.md` stays identical on every branch and Claude Code still loads both.
+- **The server's README becomes the branch README**; main's index README lives only on main.
+- **main keeps a starter `pyproject.toml`** (dev tools, pytest and ruff config) that a new server branch turns into its own project, so `uv sync` and CI still work on main.
+
 ## 2026-09-30: server 03 (redis-cache-http)
 
 - **Redis cache over Streamable HTTP as the first HTTP-first server.** Chosen with the owner; a cache keeps the service small and makes the HTTP lessons unavoidable.

@@ -8,9 +8,10 @@ and [uv](https://docs.astral.sh/uv/).
 
 ## How the repo is organized
 
-`main` holds only the shared files: this README, [CLAUDE.md](CLAUDE.md), the docs, CI and the uv
-workspace config. **Each server lives on its own branch** cut from `main`, and server branches
-are never merged back. To see or run a server, check out its branch.
+`main` holds only the shared files: this README, [CLAUDE.md](CLAUDE.md), the docs, CI and a
+starter `pyproject.toml`. **Each server lives on its own branch** cut from `main`, at the root of
+that branch (`src/<package>/`, `tests/`, its own README), and server branches are never merged
+back. To see or run a server, check out its branch.
 
 ## Servers
 
@@ -26,12 +27,12 @@ The full plan is in [docs/roadmap.md](docs/roadmap.md).
 
 ```bash
 git switch mcp/01-x-basic-stdio
-uv sync --all-packages     # install the server and the dev tools
+uv sync                    # install the server and the dev tools
 uv run pytest              # run its tests (no network or secrets needed)
 ```
 
-The server's own README explains how to run it and connect it to Claude Desktop, Claude Code or
-the MCP Inspector.
+On a server branch this README is replaced by the server's own, which explains how to run it and
+connect it to Claude Desktop, Claude Code or the MCP Inspector.
 
 ## Docs
 
